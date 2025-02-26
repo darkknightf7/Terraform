@@ -1,0 +1,126 @@
+# Template Terraform to deploy to Cloud Infrastructure
+
+# This template allows you to deploy your infrastructure using Terraform to supported cloud providers.
+# The workflow allows running tests, security scans on feature branches (as well as master).
+# After merging code to master the infrastructure will be deployed to cloud according to the given terraform template.
+
+# Prerequisites: credentials according to used cloud provider.
+# For advanced cases, please, follow terraform docs https://www.terraform.io/docs/index.html.
+
+
+image: hashicorp/terraform
+
+definitions:
+
+  testitems: &Test
+          - terraform validate
+
+  tfplan: &TFplanDev
+        name: Terraform Plan
+        script:
+          - cp credentials.json.dev dev/credentials.json
+          - cd dev/
+          - terraform init
+          - terraform plan -out=tfplan | grep -Ev 'Unless|Refreshing|following|respond|above|and|apply|hidden|^$'
+        artifacts: 
+          - dev/tfplan
+
+  tfplanprod: &TFplanProd
+        name: Terraform Plan
+        script:
+          - cp credentials.json.prod prod/credentials.json
+          - cd prod/
+          - terraform init
+          - terraform plan -out=tfplan | grep -Ev 'Unless|Refreshing|following|respond|above|and|apply|hidden|^$'
+        artifacts: 
+          - prod/tfplan
+
+  steps:
+    - step: &SecurityScan
+        name: Security Scan
+        script:
+          # Run a security scan for sensitive data.
+          # See more security tools at https://bitbucket.org/product/features/pipelines/integrations?&category=security
+          - pipe: atlassian/git-secrets-scan:0.5.1
+          - pipe: atlassian/git-secrets-scan
+
+    - step: &GenerateCredentials
+        name: Generate/Validate credentials.json
+        script:
+          # setup buildtime credentials.json.dev file
+          - touch credentials.json.dev
+          - echo "{" >> credentials.json.dev
+          - echo "  \"type\":\ \"service_account\"," >> credentials.json.dev
+          - echo "  \"project_id\":\ \"$GCP_PROJECT_ID\"," >> credentials.json.dev
+          - echo "  \"private_key_id\":\ \"$GCP_PRIVATE_KEY_ID\"," >> credentials.json.dev
+          - echo "  \"private_key\":\ \"$GCP_PRIVATE_KEY\"," >> credentials.json.dev
+          - echo "  \"client_email\":\ \"$GCP_CLIENT_EMAIL\"," >> credentials.json.dev
+          - echo "  \"client_id\":\ \"$GCP_CLIENT_ID\"," >> credentials.json.dev
+          - echo "  \"auth_uri\":\ \"https://accounts.google.com/o/oauth2/auth\"," >> credentials.json.dev
+          - echo "  \"token_uri\":\ \"https://oauth2.googleapis.com/token\"," >> credentials.json.dev
+          - echo "  \"auth_provider_x509_cert_url\":\ \"https://www.googleapis.com/oauth2/v1/certs\"," >> credentials.json.dev
+          - echo "  \"client_x509_cert_url\":\ \"$CLIENT_X509_CERT_URL\"" >> credentials.json.dev
+          - echo "}" >> credentials.json.dev
+          - sed -i 's/\\ / /g' credentials.json.dev
+        artifacts: 
+          - credentials.json.dev
+    - step: &TFapply
+        name: Terraform Apply
+        script:
+          #- cat credentials.json.${environment}
+          - cp credentials.json.${environment} ${environment}/credentials.json
+          - ls
+          - ls ${environment}/
+          - cd ${environment}/
+          - terraform init
+          - terraform apply -auto-approve tfplan
+
+
+
+pipelines:
+  default:
+    - parallel:
+       - step: *Test
+      #- step: *SecurityScan
+
+  branches:
+    master:
+      - step: *GenerateCredentials
+      
+      - step:
+          name: Terraform Plan Dev
+          <<: *TFplanDev
+          condition:
+            changesets:
+              includePaths:
+                - "dev/**"
+                - "bitbucket-pipelines.yml"
+      - step:
+          name: Terraform Plan Prod
+          <<: *TFplanProd
+          condition:
+            changesets:
+              includePaths:
+                - "prod/**"
+                - "bitbucket-pipelines.yml"
+
+      - step:
+          name: Terraform Apply Dev
+          deployment: dev
+          trigger: manual
+          <<: *TFapply
+          condition:
+            changesets:
+              includePaths:
+                - "dev/**"
+                - "bitbucket-pipelines.yml"
+
+      - step:
+          name: Terraform Apply Prod
+          deployment: production
+          trigger: manual
+          <<: *TFapply
+          condition:
+            changesets:
+              includePaths:
+                - "prod/**"

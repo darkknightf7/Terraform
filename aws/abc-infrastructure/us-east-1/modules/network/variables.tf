@@ -1,0 +1,10 @@
+variable "cidr_block_private_subnet_1" {}
+variable "cidr_block_private_subnet_2" {}
+variable "cidr_block_public_subnet_1" {}
+variable "vpc_id" {}
+variable "subnet_name_private_2" {}
+variable "subnet_name_private_1" {}
+variable "subnet_name_public_1" {}
+variable "environment" {}
+variable "internet_gateway" {}
+variable "security_group_name" {}

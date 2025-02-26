@@ -1,0 +1,66 @@
+swagger: "2.0"
+info:
+  version: '1.0.2'
+  title: 'GCP Proxy endpoints from SFCC to Order_Retrive API for dev env.'
+  description: Proxies call to Order_Retrive from SFCC client.
+schemes:
+  - https  
+consumes:
+  - application/json
+produces:
+  - application/json
+securityDefinitions:
+  api_key:
+    type: "apiKey"
+    in: "header"
+    name: "x-api-key"
+paths:
+  /pcrx/v1/fetchOrders:
+    get:
+      summary: gerOrderDetailsOfCustomer
+      parameters:
+         - in: "query"
+           name: "CustomerId"
+           required: true
+           type: string
+         - in: "query"
+           name: "filterValue"
+           required: false
+           type: string 
+         - in: "query"
+           name: "orderId"
+           required: false
+           type: string                       
+      operationId: getOrders
+      x-google-backend:
+        address: $CLOUD_RUN_URL
+        path_translation: APPEND_PATH_TO_ADDRESS
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: "Orders retrieved successfully"
+        400:
+          description: "Invalid parameters"
+        401:
+          description: "Invalid API key"
+        500:
+          description: "Internal server error" 
+  /pcrx/actuator/health:
+    get:
+      summary: Service keep-alive                     
+      operationId: keep-alive
+      x-google-backend:
+        address: $CLOUD_RUN_URL
+        path_translation: APPEND_PATH_TO_ADDRESS
+      security:
+        - api_key: []
+      responses:
+        200:
+          description: "serviceUp"
+        400:
+          description: "Invalid parameters"
+        401:
+          description: "Invalid API key"
+        500:
+          description: "Internal server error"
